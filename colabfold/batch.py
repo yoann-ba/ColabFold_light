@@ -351,6 +351,15 @@ def parse_disto_results(prediction_result):
     
     to_np = lambda a: np.asarray(a)
     
+    print(type(prediction_result))
+    if type(prediction_result) == dict:
+        print(prediction_result.keys())
+        for key in prediction_result.keys():
+            print(key, type(prediction_result[key]))
+            if type(prediction_result[key]) == dict:
+                print(prediction_result[key].keys())
+    else:
+        print(prediction_result)
     dist_bins = jax.numpy.append(0,prediction_result["distogram"]["bin_edges"])
     dist_mtx = dist_bins[prediction_result["distogram"]["logits"].argmax(-1)]
     contact_mtx = jax.nn.softmax(prediction_result["distogram"]["logits"])[:,:,dist_bins < 8].sum(-1)
