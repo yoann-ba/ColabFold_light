@@ -342,6 +342,26 @@ class file_manager:
     def set_tag(self, tag):
         self.tag = tag
 
+# parse the distogram results
+# -> outputs the distance matrix (argmax depth-wise), 
+#    contact map (8 A thresh proba sum), 
+#    the bin edges, 
+#    and slices 17 to 21 (+- 2 from threshold)
+def parse_disto_results(prediction_result):
+    
+    to_np = lambda a: np.asarray(a)
+    
+    dist_bins = jax.numpy.append(0,prediction_result["distogram"]["bin_edges"])
+    dist_mtx = dist_bins[prediction_result["distogram"]["logits"].argmax(-1)]
+    contact_mtx = jax.nn.softmax(prediction_result["distogram"]["logits"])[:,:,dist_bins < 8].sum(-1)
+    
+    out = {"distance_matrix": to_np(dist_mtx), 
+           "contact_map": to_np(contact_mtx), 
+           #"full_distogram": to_np(prediction_result["distogram"]["logits"]), 
+           "bin_edges": to_np(prediction_result["distogram"]["bin_edges"]), 
+           "slices_17_to_21": to_np(jax.nn.softmax(prediction_result["distogram"]["logits"])[:,:, 17:21+1])}
+    return out
+
 def predict_structure(
     prefix: str,
     result_dir: Path,
@@ -450,6 +470,8 @@ def predict_structure(
             # parse results
             ########################
             
+            disto_dict = parse_disto_results(result)
+            
             # summary metrics
             mean_scores.append(result["ranking_confidence"])         
             if recycles == 0: result.pop("tol",None)
@@ -480,7 +502,12 @@ def predict_structure(
             #########################
             # save results
             #########################      
-
+            
+            # save disto
+            temp_disto_path = files.get("custom_disto", "npy")
+            temp_disto_object = np.array([disto_dict])
+            np.save(temp_disto_path, temp_disto_object)
+            
             # save pdb
             protein_lines = protein.to_pdb(unrelaxed_protein)
             files.get("unrelaxed","pdb").write_text(protein_lines)
@@ -501,8 +528,9 @@ def predict_structure(
                 scores = {"plddt": np.around(plddt.astype(float), 2).tolist()}
                 if "predicted_aligned_error" in result:
                   pae   = result["predicted_aligned_error"][:seq_len,:seq_len]
-                  scores.update({"max_pae": pae.max().astype(float).item(),
-                                 "pae": np.around(pae.astype(float), 2).tolist()})
+                  scores.update({"max_pae": pae.max().astype(float).item()})
+                    #,
+                    #             "pae": np.around(pae.astype(float), 2).tolist()})
                   for k in ["ptm","iptm"]:
                     if k in conf[-1]: scores[k] = np.around(conf[-1][k], 2).item()
                   del pae
@@ -1501,21 +1529,21 @@ def run(
             with scores_file.open("r") as handle:
                 scores.append(json.load(handle))
         
-        # write alphafold-db format (pAE)
-        if "pae" in scores[0]:
-          af_pae_file = result_dir.joinpath(f"{jobname}_predicted_aligned_error_v1.json")
-          af_pae_file.write_text(json.dumps({
-              "predicted_aligned_error":scores[0]["pae"],
-              "max_predicted_aligned_error":scores[0]["max_pae"]}))
-          result_files.append(af_pae_file)
+        # # write alphafold-db format (pAE)
+        # if "pae" in scores[0]:
+        #   af_pae_file = result_dir.joinpath(f"{jobname}_predicted_aligned_error_v1.json")
+        #   af_pae_file.write_text(json.dumps({
+        #       "predicted_aligned_error":scores[0]["pae"],
+        #       "max_predicted_aligned_error":scores[0]["max_pae"]}))
+        #   result_files.append(af_pae_file)
 
-          # make pAE plots
-          paes_plot = plot_paes([np.asarray(x["pae"]) for x in scores],
-              Ls=query_sequence_len_array, dpi=dpi)
-          pae_png = result_dir.joinpath(f"{jobname}_pae.png")
-          paes_plot.savefig(str(pae_png), bbox_inches='tight')
-          paes_plot.close()
-          result_files.append(pae_png)
+        #   # make pAE plots
+        #   paes_plot = plot_paes([np.asarray(x["pae"]) for x in scores],
+        #       Ls=query_sequence_len_array, dpi=dpi)
+        #   pae_png = result_dir.joinpath(f"{jobname}_pae.png")
+        #   paes_plot.savefig(str(pae_png), bbox_inches='tight')
+        #   paes_plot.close()
+        #   result_files.append(pae_png)
 
         # make pLDDT plot
         plddt_plot = plot_plddts([np.asarray(x["plddt"]) for x in scores],
