@@ -388,7 +388,8 @@ def predict_structure(
     stop_at_score: float = 100,
     prediction_callback: Callable[[Any, Any, Any, Any, Any], Any] = None,
     use_gpu_relax: bool = False,
-    save_all: bool = False,
+    save_all: bool = False, 
+    actually_save_all: bool = False,
     save_single_representations: bool = False,
     save_pair_representations: bool = False,
     save_recycles: bool = False,
@@ -459,12 +460,12 @@ def predict_structure(
                         remove_leading_feature_dimension=("multimer" not in model_type))
                     files.get("unrelaxed",f"r{recycles}.pdb").write_text(protein.to_pdb(unrelaxed_protein))
                 
-                    if save_all:
+                    if save_all and actually_save_all:
                         with files.get("all",f"r{recycles}.pickle").open("wb") as handle:
                             pickle.dump(result, handle)
                     del unrelaxed_protein
             
-            return_representations = save_all or save_single_representations or save_pair_representations
+            return_representations = (save_all and actually_save_all) or save_single_representations or save_pair_representations
 
             # predict
             result, recycles = \
@@ -523,7 +524,7 @@ def predict_structure(
             unrelaxed_pdb_lines.append(protein_lines)
 
             # save raw outputs
-            if save_all:
+            if save_all and actually_save_all:
                 with files.get("all","pickle").open("wb") as handle:
                     pickle.dump(result, handle)
             if save_single_representations:
@@ -1223,6 +1224,7 @@ def run(
     save_single_representations: bool = False,
     save_pair_representations: bool = False,
     save_all: bool = False,
+    actually_save_all: bool = False, 
     save_recycles: bool = False,
     use_dropout: bool = False,
     use_gpu_relax: bool = False,
@@ -1507,6 +1509,7 @@ def run(
                 random_seed=random_seed,
                 num_seeds=num_seeds,
                 save_all=save_all,
+                actually_save_all = actually_save_all, 
                 save_single_representations=save_single_representations,
                 save_pair_representations=save_pair_representations,
                 save_recycles=save_recycles,
